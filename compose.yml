@@ -1,0 +1,180 @@
+services:
+  discovery-server:
+    build: ./discovery-service
+    container_name: discovery-service
+    ports:
+      - "8761:8761"
+    networks:
+      - micro_net
+    restart: unless-stopped
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "8888:8888"
+    depends_on:
+      - discovery-server
+      - customer-service
+      - booking-service
+      - keycloak
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/gateway
+    networks:
+      - micro_net
+    restart: unless-stopped
+
+  mariadb-booking:
+    image: mariadb:10.5
+    environment:
+      MARIADB_DATABASE: ${MARIADB_BOOKING_DATABASE:-booking_db}
+      MARIADB_USER: ${MARIADB_BOOKING_USER:-booking_user}
+      MARIADB_PASSWORD: ${MARIADB_BOOKING_PASSWORD:-booking_pass}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root_pass}
+    volumes:
+      - mariadb_booking_data:/var/lib/mysql
+    networks:
+      - micro_net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -p\"${MARIADB_ROOT_PASSWORD}\" || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  booking-service:
+    build: ./Booking-service
+    container_name: booking-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      - mariadb-booking
+      - discovery-server
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mariadb://mariadb-booking:3306/${MARIADB_BOOKING_DATABASE:-booking_db}
+      - SPRING_DATASOURCE_USERNAME=${MARIADB_BOOKING_USER:-booking_user}
+      - SPRING_DATASOURCE_PASSWORD=${MARIADB_BOOKING_PASSWORD:-booking_pass}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+    networks:
+      - micro_net
+    restart: unless-stopped
+
+  # MariaDB pour customer-service
+  mariadb-customer:
+    image: mariadb:10.5
+    environment:
+      MARIADB_DATABASE: ${MARIADB_CUSTOMER_DATABASE:-customer_db}
+      MARIADB_USER: ${MARIADB_CUSTOMER_USER:-customer_user}
+      MARIADB_PASSWORD: ${MARIADB_CUSTOMER_PASSWORD:-customer_pass}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root_pass}
+    volumes:
+      - mariadb_customer_data:/var/lib/mysql
+    networks:
+      - micro_net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -p\"${MARIADB_ROOT_PASSWORD}\" || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  customer-service:
+    build: ./customer-service
+    container_name: customer-service
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mariadb-customer
+      - discovery-server
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mariadb://mariadb-customer:3306/${MARIADB_CUSTOMER_DATABASE:-customer_db}
+      - SPRING_DATASOURCE_USERNAME=${MARIADB_CUSTOMER_USER:-customer_user}
+      - SPRING_DATASOURCE_PASSWORD=${MARIADB_CUSTOMER_PASSWORD:-customer_pass}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/gateway
+      - KEYCLOAK_JWK_URI=http://keycloak:8080/realms/gateway/protocol/openid-connect/certs
+    networks:
+      - micro_net
+    restart: unless-stopped
+
+  # MariaDB pour Keycloak (séparer les bases évite confusion)
+  mariadb-keycloak:
+    image: mariadb:10.5
+    environment:
+      MARIADB_DATABASE: ${MARIADB_KEYCLOAK_DATABASE:-keycloak}
+      MARIADB_USER: ${MARIADB_KEYCLOAK_USER:-keycloak}
+      MARIADB_PASSWORD: ${MARIADB_KEYCLOAK_PASSWORD:-keycloak_pass}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root_pass}
+    volumes:
+      - mariadb_keycloak_data:/var/lib/mysql
+    networks:
+      - micro_net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -p\"${MARIADB_ROOT_PASSWORD}\" || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: mariadb
+      KC_DB_URL_HOST: mariadb-keycloak
+      KC_DB_USERNAME: ${MARIADB_KEYCLOAK_USER:-keycloak}
+      KC_DB_PASSWORD: ${MARIADB_KEYCLOAK_PASSWORD:-keycloak_pass}
+
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      - mariadb-keycloak
+    networks:
+      - micro_net
+    restart: unless-stopped
+
+  # Zookeeper & Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - micro_net
+    restart: unless-stopped
+
+  broker:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    networks:
+      - micro_net
+    restart: unless-stopped
+
+volumes:
+  mariadb_booking_data:
+  mariadb_customer_data:
+  mariadb_keycloak_data:
+
+networks:
+  micro_net:
+    driver: bridge

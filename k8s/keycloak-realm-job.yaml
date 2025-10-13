@@ -1,0 +1,108 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-import-gateway-realm
+  namespace: platform
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keycloak-realm-import
+          image: quay.io/keycloak/keycloak:21.1.1
+          command:
+            - "/bin/sh"
+            - "-c"
+            - >
+              /opt/keycloak/bin/kc.sh import --file /realm/gateway-realm.json --override=true
+          env:
+            - name: KC_DB
+              value: "mariadb"
+            - name: KC_DB_URL_HOST
+              value: "mariadb-keycloak.platform.svc.cluster.local"
+            - name: KC_DB_USERNAME
+              value: "keycloak"
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_keycloak_password
+            - name: KC_HOSTNAME
+              value: "auth.local"
+            - name: KC_PROXY
+              value: "edge"
+          volumeMounts:
+            - name: realm-config
+              mountPath: /realm
+      volumes:
+        - name: realm-config
+          configMap:
+            name: gateway-realm-json
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-realm-json
+  namespace: platform
+data:
+  gateway-realm.json: |
+    {
+      "realm": "gateway",
+      "enabled": true,
+      "displayName": "Gateway Realm",
+      "roles": {
+        "realm": [
+          {"name": "user"},
+          {"name": "admin"}
+        ]
+      },
+      "users": [
+        {
+          "username": "admin",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "admin",
+              "temporary": false
+            }
+          ],
+          "realmRoles": ["admin"]
+        },
+        {
+          "username": "user1",
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": "password",
+              "temporary": false
+            }
+          ],
+          "realmRoles": ["user"]
+        }
+      ],
+      "clients": [
+        {
+          "clientId": "gateway-client",
+          "enabled": true,
+          "publicClient": false,
+          "secret": "XsZfzopSDGdBop0b110IDIUpLTRtvMSC",
+          "redirectUris": [
+            "http://localhost:8888/login/oauth2/code/keycloak",
+            "http://gateway:8888/login/oauth2/code/keycloak"
+          ],
+          "protocol": "openid-connect",
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": true,
+          "authorizationServicesEnabled": true,
+          "attributes": {
+            "post.logout.redirect.uris": "*"
+          }
+        }
+      ]
+    }

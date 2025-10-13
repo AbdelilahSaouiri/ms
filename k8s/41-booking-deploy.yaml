@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-service
+  namespace: platform
+spec:
+  selector:
+    app: booking
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-service
+  namespace: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking
+  template:
+    metadata:
+      labels:
+        app: booking
+    spec:
+      containers:
+        - name: booking
+          image: myrepo/booking-service:dev
+          ports:
+            - containerPort: 8082
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://mariadb-booking:3306/booking_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "booking_user"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_booking_password
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: "http://discovery.platform.svc.cluster.local:8761/eureka/"

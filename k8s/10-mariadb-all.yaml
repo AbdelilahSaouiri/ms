@@ -1,0 +1,212 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-booking
+  namespace: platform
+spec:
+  ports:
+    - port: 3306
+  clusterIP: None
+  selector:
+    app: mariadb-booking
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb-booking
+  namespace: platform
+spec:
+  serviceName: mariadb-booking
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb-booking
+  template:
+    metadata:
+      labels:
+        app: mariadb-booking
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:10.5
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_root_password
+            - name: MARIADB_DATABASE
+              value: booking_db
+            - name: MARIADB_USER
+              value: booking_user
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_booking_password
+          ports:
+            - containerPort: 3306
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: mariadb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+# mariadb-customer
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-customer
+  namespace: platform
+spec:
+  ports:
+    - port: 3306
+  clusterIP: None
+  selector:
+    app: mariadb-customer
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb-customer
+  namespace: platform
+spec:
+  serviceName: mariadb-customer
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb-customer
+  template:
+    metadata:
+      labels:
+        app: mariadb-customer
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:10.5
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_root_password
+            - name: MARIADB_DATABASE
+              value: customer_db
+            - name: MARIADB_USER
+              value: customer_user
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_customer_password
+          ports:
+            - containerPort: 3306
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: mariadb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+# mariadb-keycloak
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-keycloak
+  namespace: platform
+spec:
+  ports:
+    - port: 3306
+  clusterIP: None
+  selector:
+    app: mariadb-keycloak
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb-keycloak
+  namespace: platform
+spec:
+  serviceName: mariadb-keycloak
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb-keycloak
+  template:
+    metadata:
+      labels:
+        app: mariadb-keycloak
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:10.5
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_root_password
+            - name: MARIADB_DATABASE
+              value: keycloak
+            - name: MARIADB_USER
+              value: keycloak
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: mariadb_keycloak_password
+          ports:
+            - containerPort: 3306
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: mariadb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
